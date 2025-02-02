@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Text Input</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>Truth First Misinformation Detection System</h1>
+    
+    <button id="showHistoryBtn" style="position: absolute; top: 20px; right: 20px;">Show History</button>
+
+    <div class="container">
+        <div class="box input-box" id="inputBox">
+            <input type="text" id="userInput" placeholder="Enter your text here..." required>
+            <button id="submitBtn">Submit</button>
+        </div>
+
+        <div class="box output-box" id="outputBox">
+            <div class="output" id="output"></div>
+        </div>
+    </div>
+
+    <div class="history" id="history">
+        <div id="historyList"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
