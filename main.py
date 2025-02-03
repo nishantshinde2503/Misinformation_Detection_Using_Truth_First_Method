@@ -63,10 +63,11 @@ def fetch_serpapi_results(query):
         data = response.json()
         # Extract URLs and Titles from the search results
         sources = []
-        for result in data.get('organic_results', []):
+        for result in data.get('related_questions', []):
+            question = result.get('question', 'No question available')
+            snippet = result.get('snippet', 'No snippet available')
             title = result.get('title', 'No title available')
-            url = result.get('link', 'No link available')
-            sources.append(f"{title}: {url}")
+            sources.append(f"{question}: {snippet}: {title}")
         return sources  # Return list of sources (titles with URLs)
     else:
         return {"error": "Failed to fetch results from SerpAPI"}  # Error message if failed
@@ -89,7 +90,7 @@ def generate_final_result(model, main_claim, subclaims, jina_response, serpapi_s
     Jina Response: {jina_response}
     SerpAPI Sources: {', '.join(serpapi_sources)}
     Generate a final response based on this information.
-    Keep the response short focus only on main , weather it is true or false and then the reason and the supporting refernces and source
+    Keep the response short focus only on main , weather it is true or false and then the reason and the supporting refernces and source.
     """
     return generate_gemini_response(model, prompt)
 
