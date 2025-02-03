@@ -1,167 +1,112 @@
 import google.generativeai as genai
 import json
 import requests
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 
-# Configure the API key for Gemini securely
-def configure_genai(api_key: str):
-    if not api_key:
-        raise Exception("API key not found")
+# Initialize FastAPI app
+app = FastAPI()
+
+# CORS middleware to allow frontend to communicate with the backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # You can restrict this to specific origins for better security
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods (GET, POST, OPTIONS, etc.)
+    allow_headers=["*"],
+)
+
+# API Keys (replace these with your actual keys)
+GEMINI_API_KEY = "AIzaSyAj8P8tfNWx385yVJk4y4dxvlzwWZzEIqA"
+SERPAPI_KEY = "dcec1c37a6d7163a4fc766569d65cd6165e651202614add793aec4ebd7b3989d"
+JINA_API_KEY = "jina_352aaafd36df4b2fa772f9a182482321ONoyLxaA35QmkrCvqcwFPgue8fLO"
+
+# Configure Gemini model
+def configure_genai(api_key):
     genai.configure(api_key=api_key)
     return genai.GenerativeModel("gemini-1.5-flash")
 
-# Wrapper function to interact with the Gemini API
-def generate_gemini_response(model, prompt: str):
+# Generate response from Gemini model
+def generate_gemini_response(model, prompt):
     try:
         response = model.generate_content(prompt)
-        return response.text.strip()
+        return response.text.strip()  # Return the clean response
     except Exception as e:
-        raise Exception(f"Error with Gemini response: {e}")
+        return f"Error generating response: {str(e)}"  # Enhanced error message
 
-# Function to generate subclaims
-def generate_subclaims(model, claim: str):
+# Generate subclaims from the main claim
+def generate_subclaims(model, claim):
     prompt = f"""
-    You are an AI that extracts explicit subclaims from a given claim. Given the following claim:
+    Extract explicit subclaims from the claim:
     Claim: "{claim}"
-    Break down the claim into distinct subclaims, ensuring that each subclaim is a direct, structured statement that preserves the wording and logical meaning of the original claim.
     Subclaims:
     1.
     2.
     3.
     """
-    try:
-        response = model.generate_content(prompt)
-        # Assuming Gemini response text is comma-separated subclaims
-        subclaims = response.text.strip().split("\n")
-        return [subclaim.strip() for subclaim in subclaims if subclaim.strip()]
-    except Exception as e:
-        raise Exception(f"Error generating subclaims: {e}")
+    response = generate_gemini_response(model, prompt)
+    return response.split("\n")  # Return the subclaims as a list of strings
 
-# Function to generate 1 question per subclaim using Gemini, limiting to top 1
-def generate_questions_for_subclaims(model, subclaims):
-    questions = []
-    for subclaim in subclaims:
-        prompt = f"""
-        Generate one interview question related to the following subclaim:
-        Subclaim: "{subclaim}"
-        1. 
-        """
-        try:
-            response = model.generate_content(prompt)
-            # Extract the top question
-            question_list = response.text.strip().split("\n")[:1]  # Limit to top 1 question
-            questions.append(question_list)
-        except Exception as e:
-            raise Exception(f"Error generating questions: {e}")
-    return questions
-
-# Function to interact with SerpAPI for search results
-def fetch_serpapi_results(query: str, serpapi_key: str):
-    url = f"https://serpapi.com/search?q={query}&api_key={serpapi_key}"
+# Fetch search results from SerpAPI
+def fetch_serpapi_results(query):
+    url = f"https://serpapi.com/search?q={query}&api_key={SERPAPI_KEY}"
     response = requests.get(url)
     if response.status_code == 200:
-        return response.json()  
+        data = response.json()
+        # Extract URLs and Titles from the search results
+        sources = []
+        for result in data.get('organic_results', []):
+            title = result.get('title', 'No title available')
+            url = result.get('link', 'No link available')
+            sources.append(f"{title}: {url}")
+        return sources  # Return list of sources (titles with URLs)
     else:
-        return {"error": "Error fetching results from SerpAPI"}
+        return {"error": "Failed to fetch results from SerpAPI"}  # Error message if failed
 
-# Function to clean and store relevant SerpAPI output
-def process_serpapi_results(response):
-    related_questions = []
-
-    if "related_questions" in response:
-        for item in response["related_questions"]:
-            question_data = {
-                "question": item.get("question", ""),
-                "snippet": item.get("snippet", ""),
-                "title": item.get("title", "")
-            }
-            related_questions.append(question_data)
-
-    return json.dumps(related_questions, indent=2)
-
-# Function to get response from Jina API for a given subclaim
-def fetch_jina_response(subclaim: str):
-    headers = {
-        "Authorization": "Bearer jina_352aaafd36df4b2fa772f9a182482321ONoyLxaA35QmkrCvqcwFPgue8fLO"
-    }
-    
-    # Properly format the URL
+# Fetch response from Jina AI
+def fetch_jina_response(subclaim):
     url = f"https://g.jina.ai/{subclaim}"
-    
-    try:
-        # Make the API request
-        response = requests.get(url, headers=headers)
-        
-        if response.status_code == 200:
-            return response.text  # Return the response text to be used later
-        else:
-            return f"Error fetching response for subclaim '{subclaim}': {response.status_code}"
-    
-    except Exception as e:
-        return f"An error occurred while fetching the response: {e}"
+    headers = {"Authorization": f"Bearer {JINA_API_KEY}"}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.text  # Return the Jina response text
+    else:
+        return "Error fetching Jina response"  # Error message if failed
 
-# Function to generate final results from Jina and SerpAPI responses
-def generate_final_result_from_jina_and_serpapi(jina_response_text, cleaned_results, model, main_claim, subclaims):
+# Generate the final result based on multiple inputs
+def generate_final_result(model, main_claim, subclaims, jina_response, serpapi_sources):
     prompt = f"""
-    Based on the following information, generate a cohesive answer for the main claim:
-
-    Main Claim:
-    {main_claim}
-
-    The following subclaims are references to better understand the main claim:
-    Subclaim 1: {subclaims[0]}
-    Subclaim 2: {subclaims[1]}  # You can add more subclaims if needed
-    Subclaim 3: {subclaims[2]}  # Adjust the number of subclaims based on your data
-
-    Jina Response:
-    {jina_response_text}
-
-    Cleaned SerpAPI Results:
-    {cleaned_results}
-
-    Based on this information, generate a final answer for the main claim.
+    Main Claim: {main_claim}
+    Subclaims: {', '.join(subclaims)}
+    Jina Response: {jina_response}
+    SerpAPI Sources: {', '.join(serpapi_sources)}
+    Generate a final response based on this information.
     """
+    return generate_gemini_response(model, prompt)
+
+# Request body model for claim processing
+class ClaimRequest(BaseModel):
+    claim: str
+
+# Process the claim and generate the result
+@app.post("/process-claim")
+async def process_claim(request: ClaimRequest):
     try:
-        # Use Gemini model to generate a final response
-        final_result = generate_gemini_response(model, prompt)
-        return final_result
+        # Configure Gemini model
+        model = configure_genai(GEMINI_API_KEY)
+        
+        # Generate subclaims, Jina response, and SerpAPI results
+        subclaims = generate_subclaims(model, request.claim)
+        jina_response = fetch_jina_response(request.claim)
+        serpapi_sources = fetch_serpapi_results(request.claim)
+        
+        # Generate the final result
+        final_result = generate_final_result(model, request.claim, subclaims, jina_response, serpapi_sources)
+        
+        # Return the final result
+        return {"final_result": final_result}
+    
     except Exception as e:
-        raise Exception(f"Error generating final result: {e}")
-
-# Example Usage (same as before)
-gemini_key = "AIzaSyAj8P8tfNWx385yVJk4y4dxvlzwWZzEIqA"  # Replace with your actual key
-serpapi_key = "dcec1c37a6d7163a4fc766569d65cd6165e651202614add793aec4ebd7b3989d"  # Replace with your actual SerpAPI key
-claim_input = "Yesterday there was snowfall in Pune which is located in Goa"
-
-try:
-    model = configure_genai(gemini_key)
-    
-    # Generate subclaims
-    subclaims = generate_subclaims(model, claim_input)
-    
-    # Generate 1 question per subclaim (limited to top 1)
-    questions = generate_questions_for_subclaims(model, subclaims)
-    
-    for question_set in questions:
-        for question in question_set:
-            # Fetch SerpAPI results and process them
-            serpapi_results = fetch_serpapi_results(question, serpapi_key)
-            cleaned_results = process_serpapi_results(serpapi_results)
-
-            # Now fetch Jina API response for the main claim (not just the subclaim)
-            jina_response = fetch_jina_response(claim_input)  # Capture the response for the main claim
-
-            # Call the final result function with both Jina and SerpAPI responses
-            final_result = generate_final_result_from_jina_and_serpapi(
-                jina_response_text=jina_response,  # Pass the Jina response for the main claim here
-                cleaned_results=cleaned_results,    # Pass the cleaned SerpAPI results here
-                model=model,
-                main_claim=claim_input,             # Pass the main claim here
-                subclaims=subclaims                # Pass the subclaims as references
-            )
-
-            # Print the final result generated by Gemini
-            print("\nFinal Generated Result for Main Claim:")
-            print(final_result)
-
-except Exception as e:
-    print(f"An error occurred: {e}")
+        # Catch any exceptions and return a generic error message
+        raise HTTPException(status_code=500, detail=f"Error processing the claim: {str(e)}")
