@@ -6,9 +6,11 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
+from fastapi.staticfiles import StaticFiles
 
 # Initialize FastAPI app
 app = FastAPI()
+app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
 
 # CORS middleware to allow frontend to communicate with the backend
 app.add_middleware(
