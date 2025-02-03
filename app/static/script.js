@@ -23,7 +23,7 @@ submitButton.addEventListener('click', async function () {
 
     try {
         // Send input to FastAPI backend
-        const response = await fetch('http://127.0.0.1:8000/process-claim', {
+        const response = await fetch('https://misinformation-detection.onrender.com/process-claim', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
