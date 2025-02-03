@@ -72,7 +72,7 @@ def fetch_serpapi_results(query):
             sources.append(f"{question}: {snippet}: {title}")
         # Convert the list to plain text by joining each item with a newline character
         plain_text_output = "\n".join(sources)
-        return plain_text_output
+        return plain_text_output[:200]
     else:
         return "Error: Failed to fetch results from SerpAPI"
 
@@ -92,7 +92,7 @@ def fetch_jina_response(subclaim):
             return json.dumps(data, indent=2) if isinstance(data, dict) else str(data)
         except json.JSONDecodeError:
             # If response is not JSON, assume it's plain text
-            return response.text.strip()
+            return response.text[:200].strip()
     else:
         return "Error fetching Jina response"
 
