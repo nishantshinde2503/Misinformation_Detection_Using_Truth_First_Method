@@ -4,6 +4,8 @@ import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+import os
+from dotenv import load_dotenv
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -17,10 +19,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API Keys (replace these with your actual keys)
-GEMINI_API_KEY = "AIzaSyAj8P8tfNWx385yVJk4y4dxvlzwWZzEIqA"
-SERPAPI_KEY = "dcec1c37a6d7163a4fc766569d65cd6165e651202614add793aec4ebd7b3989d"
-JINA_API_KEY = "jina_352aaafd36df4b2fa772f9a182482321ONoyLxaA35QmkrCvqcwFPgue8fLO"
+# Load environment variables from .env file
+load_dotenv()
+
+# Access API keys from environment variables
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")
+JINA_API_KEY = os.getenv("JINA_API_KEY")
 
 # Configure Gemini model
 def configure_genai(api_key):
