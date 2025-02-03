@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
+from urllib.parse import quote  
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -55,43 +56,57 @@ def generate_subclaims(model, claim):
     response = generate_gemini_response(model, prompt)
     return response.split("\n")  # Return the subclaims as a list of strings
 
-# Fetch search results from SerpAPI
+# Fetch related questions from SerpAPI and return plain text output
 def fetch_serpapi_results(query):
-    url = f"https://serpapi.com/search?q={query}&api_key={SERPAPI_KEY}"
+    # URL encode the query to safely handle special characters and spaces
+    encoded_query = quote(query)
+    url = f"https://serpapi.com/search?q={encoded_query}&api_key={SERPAPI_KEY}"
     response = requests.get(url)
     if response.status_code == 200:
         data = response.json()
-        # Extract URLs and Titles from the search results
         sources = []
-        for result in data.get('organic_results', []):
+        for result in data.get('related_questions', []):
+            question = result.get('question', 'No question available')
+            snippet = result.get('snippet', 'No snippet available')
             title = result.get('title', 'No title available')
-            url = result.get('link', 'No link available')
-            sources.append(f"{title}: {url}")
-        return sources  # Return list of sources (titles with URLs)
+            sources.append(f"{question}: {snippet}: {title}")
+        # Convert the list to plain text by joining each item with a newline character
+        plain_text_output = "\n".join(sources)
+        return plain_text_output
     else:
-        return {"error": "Failed to fetch results from SerpAPI"}  # Error message if failed
+        return "Error: Failed to fetch results from SerpAPI"
 
 # Fetch response from Jina AI
+
 def fetch_jina_response(subclaim):
-    url = f"https://g.jina.ai/{subclaim}"
+    encoded_subclaim = quote(subclaim)  # Encode the subclaim for a valid URL
+    url = f"https://g.jina.ai/{encoded_subclaim}"
     headers = {"Authorization": f"Bearer {JINA_API_KEY}"}
     response = requests.get(url, headers=headers)
+    
     if response.status_code == 200:
-        return response.text  # Return the Jina response text
+        try:
+            # Attempt to parse JSON if response is structured
+            data = response.json()
+            # Extract text from the response (modify based on actual response structure)
+            return json.dumps(data, indent=2) if isinstance(data, dict) else str(data)
+        except json.JSONDecodeError:
+            # If response is not JSON, assume it's plain text
+            return response.text.strip()
     else:
-        return "Error fetching Jina response"  # Error message if failed
+        return "Error fetching Jina response"
 
 # Generate the final result based on multiple inputs
 def generate_final_result(model, main_claim, subclaims, jina_response, serpapi_sources):
     prompt = f"""
     Main Claim: {main_claim}
-    Subclaims: {', '.join(subclaims)}
+    Subclaims: {subclaims}
     Jina Response: {jina_response}
-    SerpAPI Sources: {', '.join(serpapi_sources)}
+    SerpAPI Sources: {serpapi_sources}
     Generate a final response based on this information.
-    Keep the response short focus only on main , weather it is true or false and then the reason and the supporting refernces and source.
     """
     return generate_gemini_response(model, prompt)
+
 
 # Request body model for claim processing
 class ClaimRequest(BaseModel):
@@ -106,11 +121,15 @@ async def process_claim(request: ClaimRequest):
         
         # Generate subclaims, Jina response, and SerpAPI results
         subclaims = generate_subclaims(model, request.claim)
-        jina_response = fetch_jina_response(request.claim)
+        subclaims_text = "\n".join(subclaims)  # Convert list to plain text
+        
+        jina_response = fetch_jina_response(request.claim).strip()  # Ensure plain text
+        
         serpapi_sources = fetch_serpapi_results(request.claim)
+        serpapi_sources_text = "\n".join(serpapi_sources)  # Convert list to plain text
         
         # Generate the final result
-        final_result = generate_final_result(model, request.claim, subclaims, jina_response, serpapi_sources)
+        final_result = generate_final_result(model, request.claim, subclaims_text, jina_response, serpapi_sources_text)
         
         # Return the final result
         return {"final_result": final_result}
@@ -118,5 +137,6 @@ async def process_claim(request: ClaimRequest):
     except Exception as e:
         # Catch any exceptions and return a generic error message
         raise HTTPException(status_code=500, detail=f"Error processing the claim: {str(e)}")
+
 
 app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
