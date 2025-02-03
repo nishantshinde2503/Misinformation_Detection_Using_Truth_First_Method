@@ -64,10 +64,9 @@ def fetch_serpapi_results(query):
         # Extract URLs and Titles from the search results
         sources = []
         for result in data.get('related_questions', []):
-            question = result.get('question', 'No question available')
             snippet = result.get('snippet', 'No snippet available')
             title = result.get('title', 'No title available')
-            sources.append(f"{question}: {snippet}: {title}")
+            sources.append(f"{snippet}: {title}")
         return sources  # Return list of sources (titles with URLs)
     else:
         return {"error": "Failed to fetch results from SerpAPI"}  # Error message if failed
