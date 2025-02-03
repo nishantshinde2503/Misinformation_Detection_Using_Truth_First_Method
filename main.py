@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 # Initialize FastAPI app
 app = FastAPI()
-app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
+
 
 # CORS middleware to allow frontend to communicate with the backend
 app.add_middleware(
@@ -117,3 +117,5 @@ async def process_claim(request: ClaimRequest):
     except Exception as e:
         # Catch any exceptions and return a generic error message
         raise HTTPException(status_code=500, detail=f"Error processing the claim: {str(e)}")
+
+app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
