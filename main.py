@@ -89,6 +89,7 @@ def generate_final_result(model, main_claim, subclaims, jina_response, serpapi_s
     Jina Response: {jina_response}
     SerpAPI Sources: {', '.join(serpapi_sources)}
     Generate a final response based on this information.
+    Keep the response short focus only on main , weather it is true or false and then the reason and the supporting refernces and source
     """
     return generate_gemini_response(model, prompt)
 
